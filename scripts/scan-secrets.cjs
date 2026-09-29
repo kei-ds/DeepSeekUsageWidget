@@ -14,6 +14,13 @@
  */
 const { app, safeStorage } = require('electron')
 const fs = require('node:fs')
+/**
+ * 关键：Electron 会给 fs 打补丁，使 readFileSync('xxx.asar') 去读**归档内部**而不是
+ * 归档文件本身，于是抛 ENOENT。若把异常 catch 掉，asar 就会被静默跳过、
+ * 得出「未发现泄露」的假结论——这个 bug 真实发生过（漏掉了整个 app.asar）。
+ * original-fs 绕开该补丁，拿到的是磁盘上的原始字节。
+ */
+const origFs = require('original-fs')
 const path = require('node:path')
 
 // 裸脚本跑时 Electron 的 app 名是 "Electron"，userData 会指错目录，
@@ -24,9 +31,17 @@ if (process.env.APPDATA) {
 }
 
 // 可只扫描指定子目录：node scripts/scan-secrets.cjs release
-// （整树扫描是默认行为；指定目录用于打包产物另存到别处时做定向校验）
-const ROOT = path.resolve(__dirname, '..', process.argv[2] || '.')
-const SKIP_DIRS = new Set(['node_modules', '.git', '.tmp'])
+// 默认扫「源码 + out/」——即真正会被打进产物的一切；
+// 历史产物目录 dist/ release/ 默认跳过：它们是上一轮的输出，
+// 若纳入扫描，一旦旧产物里有东西且被占用删不掉，构建就会被永久卡住。
+const EXPLICIT = process.argv[2]
+const ROOT = path.resolve(__dirname, '..', EXPLICIT || '.')
+const SKIP_DIRS = new Set([
+  'node_modules',
+  '.git',
+  '.tmp',
+  ...(EXPLICIT ? [] : ['dist', 'release'])
+])
 const BINARY_EXT = /\.(exe|dll|node|png|jpg|ico|icns|asar|zip|7z|pak|bin)$/i
 /** 单文件扫描上限，避免读入几百 MB 的产物把内存打满。 */
 const MAX_FILE_BYTES = 300 * 1024 * 1024
@@ -111,40 +126,66 @@ app.whenReady().then(() => {
   console.log(`[scan] 用 ${secrets.length} 个本机凭据检索工作区…`)
 
   const hits = []
+  const skipped = []
   let scanned = 0
   for (const file of walk(ROOT)) {
     let stat
     try {
-      stat = fs.statSync(file)
-    } catch {
+      stat = origFs.statSync(file)
+    } catch (err) {
+      skipped.push({ file, why: `stat 失败: ${err.code || err.message}` })
       continue
     }
-    if (stat.size > MAX_FILE_BYTES || stat.size === 0) continue
-    // 二进制产物（exe/asar 等）同样要扫——泄露正是从那里出去的
+    if (stat.size === 0) continue
+    if (stat.size > MAX_FILE_BYTES) {
+      skipped.push({ file, why: `超过扫描上限 (${stat.size} bytes)` })
+      continue
+    }
+    // 二进制产物（exe / asar 等）同样要扫——泄露正是从那里出去的
     let buf
     try {
-      buf = fs.readFileSync(file)
-    } catch {
+      buf = origFs.readFileSync(file)
+    } catch (err) {
+      // 绝不静默跳过：漏读一个文件就可能漏掉整个泄露
+      skipped.push({ file, why: `读取失败: ${err.code || err.message}` })
       continue
     }
     scanned++
     for (const s of secrets) {
       if (buf.includes(s.value)) {
-        hits.push({ file: path.relative(ROOT, file), label: s.label })
+        hits.push({ file: path.relative(ROOT, file), label: s.label, kind: '完整匹配' })
+        continue
+      }
+      // 前缀命中也要报：真实事故中写进代码的是凭据的**前 24 字符**（不是完整值），
+      // 只查完整匹配会漏掉这类半截泄露。16 字符的随机重合概率极低，噪音可接受。
+      for (const n of [24, 16]) {
+        if (s.value.length > n && buf.includes(s.value.slice(0, n))) {
+          hits.push({ file: path.relative(ROOT, file), label: s.label, kind: `前 ${n} 字符前缀` })
+          break
+        }
       }
     }
   }
 
   console.log(`[scan] 已扫描 ${scanned} 个文件`)
+  if (skipped.length) {
+    console.log(`[scan] 已跳过 ${skipped.length} 个文件（未读取，不计入结论）：`)
+    for (const s of skipped.slice(0, 10)) {
+      console.log(`   ${path.relative(ROOT, s.file)}  ← ${s.why}`)
+    }
+    if (skipped.length > 10) console.log(`   …还有 ${skipped.length - 10} 个`)
+  }
+
   if (!hits.length) {
-    console.log('[scan] 未发现凭据泄露 ✓')
+    console.log(`[scan] 未发现凭据泄露 ✓${skipped.length ? '（但存在被跳过的文件，结论不完整）' : ''}`)
     app.quit()
     return
   }
 
   console.error('\n[scan] ✗ 发现凭据泄露：')
-  for (const h of hits) console.error(`   ${h.file}   ← ${h.label}`)
-  console.error('\n请清理上述文件后重试。注意二进制产物需要重新构建。\n')
+  for (const h of hits) console.error(`   ${h.file}   ← ${h.label} / ${h.kind}`)
+  console.error('\n请清理上述文件后重试。注意二进制产物需要重新构建。')
+  console.error('（若某个文件被其它进程占用而删不掉，通常是杀软或索引器持有句柄，重启后再试）\n')
   process.exitCode = 1
   app.quit()
 })
