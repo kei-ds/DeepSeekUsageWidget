@@ -1,0 +1,280 @@
+:root {
+  --bg: #0e1116;
+  --panel: #161b22;
+  --panel-2: #1b2230;
+  --border: #262d3a;
+  --text: #e6edf7;
+  --muted: #8b97a8;
+  --accent: #4f8cff;
+  --good: #3fb950;
+  --warn: #d29922;
+  --bad: #f85149;
+  --radius: 10px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif;
+  font-size: 13px;
+  user-select: none;
+}
+
+#app {
+  height: 100%;
+}
+
+/* --- 无边框窗口拖动区域 ---
+   只有顶栏允许拖动；模块标题栏必须 no-drag，否则 OS 会吞掉 mousedown，
+   GridStack 永远收不到拖拽起始事件。 */
+.app-drag {
+  -webkit-app-region: drag;
+}
+
+.app-no-drag,
+button,
+input,
+select,
+textarea,
+a {
+  -webkit-app-region: no-drag;
+}
+
+/* --- 布局骨架 --- */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  border: 1px solid var(--border);
+}
+
+.board-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px;
+}
+
+/* 模态面板打开时，网格区域必须彻底不可交互。
+   只靠一层半透明遮罩不够：模块标题栏仍带 cursor:move、缩放手柄也还在，
+   看着就像能拖，很容易误触。这里直接让指针事件无法落到网格上。 */
+.board-wrap.is-inert {
+  pointer-events: none;
+}
+
+.board-wrap.is-inert .module-frame__header {
+  cursor: default;
+}
+
+.board-wrap.is-inert .ui-resizable-handle {
+  display: none;
+}
+
+/* 关掉「显示缩放手柄」时只去掉图标，保留手柄元素本身——
+   手柄既是图标也是命中区域，display:none 会让缩放一起失效。
+   GridStack 用内联 SVG 背景图绘制四角小箭头，这里只清掉背景图。 */
+.board-wrap.no-resize-icons .ui-resizable-handle {
+  background-image: none !important;
+}
+
+/* GridStack 容器及其内部一律 no-drag，避免与窗口拖动冲突 */
+.board-wrap,
+.grid-stack,
+.grid-stack * {
+  -webkit-app-region: no-drag;
+}
+
+.grid-stack {
+  min-height: 100%;
+}
+
+/* --- 卡片外观 ---
+   注意不要覆盖 overflow：GridStack 自带 overflow-y:auto，正是它把内容限制在卡片内。
+   改成 visible 会让内容溢出并压到下一个模块上。这里统一 hidden，滚动交给卡片 body。 */
+.grid-stack-item-content {
+  background: transparent !important;
+  overflow: hidden !important;
+}
+
+.module-frame {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.module-frame__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--border);
+  cursor: move;
+  flex: 0 0 auto;
+}
+
+.module-frame__title {
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
+.module-frame__sub {
+  color: var(--muted);
+  font-size: 11px;
+  margin-left: auto;
+  margin-right: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.module-frame__close {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 5px;
+}
+
+.module-frame__close:hover {
+  background: var(--bad);
+  color: #fff;
+}
+
+.module-frame__body {
+  flex: 1;
+  min-height: 0;
+  padding: 8px 10px 10px;
+  overflow: auto;
+}
+
+/* --- 通用控件 --- */
+button {
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 9px;
+  cursor: pointer;
+}
+
+button:hover {
+  border-color: var(--accent);
+}
+
+button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+input[type='text'],
+input[type='date'],
+textarea,
+select {
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 7px;
+}
+
+/* --- 小工具类 --- */
+.muted {
+  color: var(--muted);
+}
+
+.mono {
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+/* 子项自适应双列/多列，避免卡片高度不够时内容被裁掉 */
+.pairs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 0 14px;
+}
+
+.stat-label {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.stat-value {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-value.big {
+  font-size: 20px;
+}
+
+.stat-value.good {
+  color: var(--good);
+}
+
+.stat-value.warn {
+  color: var(--warn);
+}
+
+.stat-value.bad {
+  color: var(--bad);
+}
+
+.pill {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+/* --- 滚动条 --- */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2b3341;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}

@@ -1,0 +1,43 @@
+appId: com.local.deepseekusagewidget
+productName: DeepSeekUsageWidget
+directories:
+  output: dist
+  buildResources: build
+files:
+  - out/**/*
+  - package.json
+# 不需要 extraResources：托盘图标是用代码里的位图生成的，没有二进制资源文件。
+asar: true
+npmRebuild: false
+win:
+  # 给 PNG 即可，electron-builder 会用 app-builder 自动转成多尺寸 .ico。
+  # 要求至少 256x256（这里是 512x512）。
+  icon: build/icon.png
+  artifactName: ${productName}-${version}-${arch}.${ext}
+  # 不做代码签名，也不改写 exe 内嵌资源。
+  # 原因：改写 exe 需要 electron-builder 下载 winCodeSign 工具包，而该包内含 macOS
+  # 的 .dylib 符号链接；在未开启 Windows 开发者模式的普通账户下解压会因无法创建
+  # 符号链接而失败（app-builder 会反复重试直至构建中断）。
+  # 代价：exe 文件本身保留 Electron 默认图标（安装包与快捷方式图标不受影响）。
+  # 想要 exe 也带自定义图标：在「设置 → 系统 → 开发者选项」里开启“开发人员模式”，
+  # 然后把这行删掉重新打包即可。
+  signAndEditExecutable: false
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+nsis:
+  # 必须和 portable 分开命名：两者的默认 artifactName 一模一样，
+  # 后构建的 portable 会直接把安装包覆盖掉。
+  artifactName: ${productName}-Setup-${version}.${ext}
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  runAfterFinish: true
+portable:
+  artifactName: ${productName}-Portable-${version}.${ext}

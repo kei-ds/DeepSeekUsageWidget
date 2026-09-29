@@ -1,0 +1,37 @@
+{
+  "name": "deepseek-usage-widget",
+  "productName": "DeepSeekUsageWidget",
+  "version": "0.1.1",
+  "description": "DeepSeek 用量桌面挂件：置顶无边框、可拖拽排版、鼠标穿透、显示余额与 token 用量",
+  "main": "./out/main/index.js",
+  "author": "local",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "typecheck": "vue-tsc --noEmit -p tsconfig.json",
+    "mock": "node scripts/mock-deepseek.mjs",
+    "diag": "electron scripts/diag-api.cjs",
+    "scan": "electron scripts/scan-secrets.cjs",
+    "icon": "node scripts/generate-icon.mjs",
+    "test:data": "esbuild scripts/test-data.mts --bundle --platform=node --format=esm --outfile=.tmp/test-data.mjs --alias:@shared=./src/shared --log-level=warning && node .tmp/test-data.mjs",
+    "dist": "npm run icon && npm run build && npm run scan && electron-builder --win",
+    "dist:portable": "npm run icon && npm run build && npm run scan && electron-builder --win portable"
+  },
+  "dependencies": {
+    "gridstack": "^11.2.2",
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.1",
+    "@types/node": "^22.10.2",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^2.3.0",
+    "typescript": "^5.7.2",
+    "vite": "^5.4.11",
+    "vue-tsc": "^2.1.10"
+  }
+}
